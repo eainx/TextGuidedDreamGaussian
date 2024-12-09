@@ -1,0 +1,7 @@
+dataset
+figure
+logs
+PhraseCutDataset
+test
+*.txt
+*.pth
