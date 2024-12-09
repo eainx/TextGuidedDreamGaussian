@@ -7,13 +7,54 @@ import cv2
 import matplotlib
 import time
 from PIL import Image
+import numpy as np
 
 matplotlib.use('TkAgg')
 
 class Evaluation:
     def __init__(self):
         self.refvg_loader = RefVGLoader(split='miniv')
-        self.sam = SamAutomaticMaskGenerator(build_sam(checkpoint="/home/eainx/Documents/DL/FinalProject/dreamgaussian/CLIP_SAM/sam_vit_h_4b8939.pth"))
+        self.model_type = "vit_h"
+        self.sam_base = sam_model_registry[self.model_type](checkpoint="/home/eainx/Documents/DL/FinalProject/dreamgaussian/CLIP_SAM/sam_vit_h_4b8939.pth")
+        self.sam_base.to(device=self.device)
+        # self.sam = SamAutomaticMaskGenerator(build_sam(checkpoint="/home/eainx/Documents/DL/FinalProject/dreamgaussian/CLIP_SAM/sam_vit_h_4b8939.pth"))
+        self.sam = SamAutomaticMaskGenerator(self.sam_base)
+    def load_image_as_mask(self, filepath):
+        image = Image.open(filepath).convert("L")
+        mask = np.array(image)
+        mask = np.where(mask > 128, 1, 0)
+        return mask
+
+    # IoU 계산 함수
+    def calculate_iou(self, mask1, mask2):
+        intersection = np.logical_and(mask1, mask2)
+        union = np.logical_or(mask1, mask2)
+        iou = np.sum(intersection) / np.sum(union)
+        return iou
+
+
+    def process_file(self, filepath):
+        with open(filepath, 'r') as file:
+            lines = file.readlines()
+
+        # 이미지와 해당 마스크 저장
+        masks = {}
+        updated_lines = []
+
+        for line in lines:
+            new_line = line.strip()
+            parts = line.strip().split('\t')
+            image_filename = parts[0]
+            gt = self.load_image_as_mask('eval_gt/{}'.format(image_filename))
+            ours = self.load_image_as_mask('eval_ours/{}'.format(image_filename))
+            iou = self.calculate_iou(gt, ours)
+            new_line += f"\tIoU: {iou:.4f}"
+            updated_lines.append(new_line + '\n')
+
+        # 파일에 변경사항을 다시 쓰기
+        with open(filepath, 'w') as file:
+            file.writelines(updated_lines)
+
 
     def get_ours(self):
         image_ids = self.refvg_loader.img_ids
